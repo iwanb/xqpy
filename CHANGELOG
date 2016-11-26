@@ -1,0 +1,12 @@
+# TODO
+
+  * Split code into files and document it
+  * Have some real tests
+  * Add Zorba implementation
+  * Add a command to use it from a terminal
+  * Make it thread safe
+  * Test on non Linux platforms
+  * Support the different types in a better way
+
+# [1.0] Initial release
+  * Bindings to the XQC API through cffi
