@@ -250,6 +250,14 @@ class DynamicContext:
         self.expr = expr
         self._context = _context
         self._context_item = None
+    
+    def set_error_handler(self, handler=None):
+        if handler is None:
+            handler = _error_handler
+        _handle_error(
+            self._context.set_error_handler(self._context, 
+                                            _error_handler))
+    
     def set_variable(self, name, value, uri=''):
         """
         Set a variable from a sequence
@@ -306,15 +314,16 @@ class Expression:
     def execute(self, context=None):
         _seq = ffi.new('XQC_Sequence**')
         if context is None:
-            _context = ffi.NULL
-        else:
-            _context = context._context
+            context = self.create_context()
+        _context = context._context
         _handle_error(self._expr.execute(self._expr, _context, _seq))
         return Sequence(self.impl, _seq[0], refs=[self])
     def create_context(self):
         _context = ffi.new('XQC_DynamicContext**')
         _handle_error(self._expr.create_context(self._expr, _context))
-        return DynamicContext(self, _context[0])
+        c = DynamicContext(self, _context[0])
+        c.set_error_handler()
+        return c
     def __del__(self):
         self._expr.free(self._expr)
 
@@ -429,6 +438,14 @@ def _handle_error(err):
         raise NotNodeError
     elif err == lib.XQC_UNRECOGNIZED_ENCODING:
         raise UnrecognizedEncodingError
+    elif err == lib.XQC_STATIC_ERROR:
+        raise XQueryStaticError
+    elif err == lib.XQC_TYPE_ERROR:
+        raise XQueryTypeError
+    elif err == lib.XQC_DYNAMIC_ERROR:
+        raise XQueryDynamicError
+    elif err == lib.XQC_SERIALIZATION_ERROR:
+        raise XQuerySerializationError
     elif err != lib.XQC_NO_ERROR:
         # TODO proper error checking
         raise RuntimeError
