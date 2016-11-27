@@ -355,11 +355,7 @@ class Sequence:
     def __next__(self):
         _handle_error(self._seq.next(self._seq))
         t = self.type()
-        if t is Double or t is Float:
-            v = self.double_value()
-        else:
-            v = self.string_value()
-        return t(v)
+        return t.from_item(self)
     def next(self):
         return self.__next__()
     def values(self):
@@ -460,11 +456,15 @@ class BaseType(object):
         """Transform, if need be, the given Python value to the XQuery representation"""
         self.value = unicode(value)
     def __unicode__(self):
-        return unicode(self.value)
+        return self.__str__()
     def __str__(self):
         return unicode(self.value)
     def __eq__(self, other):
         return (self.value == other.value)
+    @classmethod
+    def from_item(cls, sequence):
+        """Create the type from a sequence item"""
+        return cls(sequence.string_value())
     def val(self):
         """Get the usable Python representation"""
         return self.value
@@ -476,8 +476,20 @@ class Empty(BaseType):
     def val(self):
         return None
 class Document(BaseType):
-    pass
-class Element(BaseType):
+    def __init__(self, node_name, value, uri=""):
+        self.node_name = node_name
+        self.value = value
+        self.uri = ""
+    @classmethod
+    def from_item(cls, sequence):
+        (uri, node) = sequence.node_name()
+        return cls(node, sequence.string_value(), uri=uri)
+    def __str__(self):
+        # Better way to do this?
+        return '<'+self.uri+self.node_name+'>' + self.value + '</'+self.node_name+'>'
+    def val(self):
+        return (self.node_name, self.value)
+class Element(Document):
     pass
 class Attribute(BaseType):
     pass
@@ -526,6 +538,9 @@ class Double(BaseType):
         self.value = float(value)
     def __float__(self):
         return self.value
+    @classmethod
+    def from_item(cls, sequence):
+        return cls(sequence.double_value())
     def val(self):
         return self.value
 class Duration(BaseType):
