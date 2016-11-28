@@ -279,10 +279,15 @@ class DynamicContext:
                                         _seq))
         return Sequence(self.expr.impl, _seq[0])
     def set_context_item(self, value):
+        if value.type() is Empty:
+            value.movenext()
         _handle_error(self._context.set_context_item(
                                         self._context, 
                                         value._seq))
         self._context_item = value
+        if type(self.expr.impl) is XQillaImplementation:
+            # Bug? API says it should be freed
+            value._owned = False
     def get_context_item(self):
         _seq = ffi.new('XQC_Sequence**')
         _handle_error(self._context.get_context_item(
@@ -352,8 +357,11 @@ class Sequence:
         s = ffi.new('char**')
         _handle_error(self._seq.node_name(self._seq, uri, s))
         return (ffi.string(uri[0]).decode('utf8'), ffi.string(s[0]).decode('utf8'))
-    def __next__(self):
+    def movenext(self):
         _handle_error(self._seq.next(self._seq))
+        return self
+    def __next__(self):
+        self.movenext()
         t = self.type()
         return t.from_item(self)
     def next(self):

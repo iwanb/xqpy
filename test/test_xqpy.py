@@ -12,9 +12,12 @@ except NameError:
 
 class TestImplementation(TestCase):
     def test_example(self):
-        q = self.impl.prepare('1 to 10')
-        s = q.execute()
-        self.assertEqual(list(s.values()), list(range(1, 11)))
+        q = self.impl.prepare('./parent/child/text()')
+        c = q.create_context()
+        d = self.impl.parse_document('<parent><child>1</child><child>2</child></parent>')
+        c.set_context_item(d)
+        s = q.execute(context=c)
+        self.assertEqual(list(s.values()), ['1', '2'])
     def test_file(self):
         with tempfile.TemporaryFile() as f:
             f.write('1 to 10'.encode('utf8'))
@@ -143,7 +146,10 @@ class TestSequence(TestCase):
             with self.assertRaises(StopIteration):
                 s.__next__()
 def implementations():
-    return [('XQilla', xqpy.XQillaImplementation())]
+    imps = []
+    if hasattr(xqpy, 'XQillaImplementation'):
+        imps.append(('XQilla', xqpy.XQillaImplementation()))
+    return imps
 
 test_cases = (TestStaticContext, TestImplementation, TestSequence)
 
