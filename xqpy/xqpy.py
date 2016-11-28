@@ -83,12 +83,25 @@ class Implementation:
         _handle_error(self._impl.create_double_sequence(self._impl, cvalues, len(cvalues), _seq))
         return Sequence(self, _seq[0])
 
-class XQillaImplementation(Implementation):
-    def __init__(self):
-        self._impl = lib.createXQCImplementation()
-    def __del__(self):
-        self._impl.free(self._impl)
-    
+if hasattr(lib, 'createMyXQillaXQCImplementation'):
+    class XQillaImplementation(Implementation):
+        def __init__(self):
+            self._impl = lib.createMyXQillaXQCImplementation()
+        def __del__(self):
+            self._impl.free(self._impl)
+  
+if hasattr(lib, 'zorba_implementation'):
+    class ZorbaImplementation(Implementation):
+        def __init__(self):
+            self._store = lib.create_store()
+            if self._store == ffi.NULL:
+                raise RuntimeError('Could not create Zorba store')
+            _impl = ffi.new('XQC_Implementation **')
+            _handle_error(lib.zorba_implementation(_impl, self._store))
+            self._impl = _impl[0]
+        def __del__(self):
+            self._impl.free(self._impl)
+            lib.shutdown_store(self._impl)
 
 class StaticContext:
     """
@@ -285,9 +298,6 @@ class DynamicContext:
                                         self._context, 
                                         value._seq))
         self._context_item = value
-        if type(self.expr.impl) is XQillaImplementation:
-            # Bug? API says it should be freed
-            value._owned = False
     def get_context_item(self):
         _seq = ffi.new('XQC_Sequence**')
         _handle_error(self._context.get_context_item(

@@ -148,7 +148,9 @@ class TestSequence(TestCase):
 def implementations():
     imps = []
     if hasattr(xqpy, 'XQillaImplementation'):
-        imps.append(('XQilla', xqpy.XQillaImplementation()))
+        imps.append(('XQilla', xqpy.XQillaImplementation))
+    if hasattr(xqpy, 'ZorbaImplementation'):
+        imps.append(('Zorba', xqpy.ZorbaImplementation))
     return imps
 
 test_cases = (TestStaticContext, TestImplementation, TestSequence)
@@ -157,9 +159,10 @@ def load_tests(loader, tests, pattern):
     suite = TestSuite()
     for (name, impl) in implementations():
         for test_class in test_cases:
-            tests = loader.loadTestsFromTestCase(test_class)
+            new_class = type(name + test_class.__name__, (test_class,), {})
+            tests = loader.loadTestsFromTestCase(new_class)
             for test in tests:
-                test.impl = impl
+                test.impl = impl()
                 suite.addTest(test)
     return suite
 
