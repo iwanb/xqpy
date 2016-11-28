@@ -1,3 +1,4 @@
+import os 
 from cffi import FFI
 ffibuilder = FFI()
 
@@ -15,7 +16,9 @@ ffibuilder.set_source("_xqpy",
     # (more arguments like setup.py's Extension class:
     # include_dirs=[..], extra_objects=[..], and so on)
 
-with open('xqcbody.h') as f:
+dir_path = os.path.dirname(os.path.realpath(__file__))
+
+with open(os.path.join(dir_path, 'xqcbody.h')) as f:
     ffibuilder.cdef(f.read())
 
 ffibuilder.cdef("""
