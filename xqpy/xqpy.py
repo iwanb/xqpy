@@ -26,7 +26,10 @@ class Implementation:
         else:
             _context = context._context
         _handle_error(self._impl.prepare(self._impl, _expr_str, _context, _expr))
-        return Expression(self, _expr[0], context)
+        e = Expression(self, _expr[0], context)
+        # context should be deleted before expression
+        context.refs.append(e)
+        return e
     def prepare_file(self, expression_file, context=None):
         """Same as prepare but from a file"""
         _expr = ffi.new('XQC_Expression**')
@@ -36,7 +39,10 @@ class Implementation:
         else:
             _context = context._context
         _handle_error(self._impl.prepare_file(self._impl, expression_file, _context, _expr))
-        return Expression(self, _expr[0], context)
+        e = Expression(self, _expr[0], context)
+        # context should be deleted before expression
+        context.refs.append(e)
+        return e
         
     def parse_document(self, document):
         _seq = ffi.new('XQC_Sequence**')
@@ -75,13 +81,15 @@ class Implementation:
         _seq = ffi.new('XQC_Sequence**')
         _handle_error(self._impl.create_string_sequence(self._impl, cvalues, len(cvalues), _seq))
         return Sequence(self, _seq[0])
-    def create_double_sequence(self, values):
-        cvalues = []
-        for v in values:
-            cvalues.append(ffi.new('double', float(values)))
-        _seq = ffi.new('XQC_Sequence**')
-        _handle_error(self._impl.create_double_sequence(self._impl, cvalues, len(cvalues), _seq))
-        return Sequence(self, _seq[0])
+    # Looks like there is loss of precision and zorba interprets the doubles weirdly
+    # Ignoring this for now
+    #def create_double_sequence(self, values):
+    #    cvalues = []
+    #    for v in values:
+    #        cvalues.append(float(v))
+    #    _seq = ffi.new('XQC_Sequence**')
+    #    _handle_error(self._impl.create_double_sequence(self._impl, cvalues, len(cvalues), _seq))
+    #    return Sequence(self, _seq[0])
 
 if hasattr(lib, 'createMyXQillaXQCImplementation'):
     class XQillaImplementation(Implementation):
@@ -101,15 +109,16 @@ if hasattr(lib, 'zorba_implementation'):
             self._impl = _impl[0]
         def __del__(self):
             self._impl.free(self._impl)
-            lib.shutdown_store(self._impl)
+            lib.shutdown_store(self._store)
 
 class StaticContext:
     """
     Static context for preparing expressions
     """
-    def __init__(self, impl, _context):
+    def __init__(self, impl, _context, refs=[]):
         self.impl = impl
         self._context = _context
+        self.refs = refs
     
     def set_error_handler(self, handler=None):
         if handler is None:
@@ -122,7 +131,7 @@ class StaticContext:
         context = ffi.new('XQC_StaticContext**')
         _handle_error(
             self._context.create_child_context(self._context, context))
-        return StaticContext(self.impl, context[0])
+        return StaticContext(self.impl, context[0], refs=[self])
     
     def declare_ns(self, prefix, uri):
         _handle_error(
@@ -130,13 +139,13 @@ class StaticContext:
                                     prefix.encode('utf8'),
                                     uri.encode('utf8')))
     def get_ns_by_prefix(self, prefix):
-        uri = ffi.new('char**')
+        uri = ffi.new('char**', ffi.NULL)
         _handle_error(
             self._context.get_ns_by_prefix(self._context, 
                                     prefix.encode('utf8'),
                                     uri))
         if uri[0] == ffi.NULL:
-            return None
+            raise XQueryStaticError
         return ffi.string(uri[0]).decode('utf8')
     def set_default_element_and_type_ns(self, uri):
         _handle_error(
@@ -224,9 +233,9 @@ class StaticContext:
         return (int(preserve[0]), int(inherit[0]))
     
     def set_base_uri(self, base_uri):
+        bue = base_uri.encode('utf8')
         _handle_error(
-            self._context.set_base_uri(self._context, 
-                                       base_uri.encode('utf8')))
+            self._context.set_base_uri(self._context, bue))
     def get_base_uri(self):
         s = ffi.new('char**')
         self._context.get_base_uri(self._context, s)
@@ -259,10 +268,11 @@ class OrderingMode:
     unordered = lib.XQC_UNORDERED
 
 class DynamicContext:
-    def __init__(self, expr, _context):
+    def __init__(self, expr, _context, refs=[]):
         self.expr = expr
         self._context = _context
         self._context_item = None
+        self.refs = refs
     
     def set_error_handler(self, handler=None):
         if handler is None:
@@ -290,7 +300,10 @@ class DynamicContext:
                                         uri.encode('utf8'), 
                                         name.encode('utf8'), 
                                         _seq))
-        return Sequence(self.expr.impl, _seq[0])
+        # Should seq be freed? no idea
+        s = Sequence(self.expr.impl, _seq[0])
+        self.refs.append(s)
+        return s
     def set_context_item(self, value):
         if value.type() is Empty:
             value.movenext()
@@ -303,7 +316,9 @@ class DynamicContext:
         _handle_error(self._context.get_context_item(
                                         self._context,  
                                         _seq))
-        return Sequence(self.expr.impl, _seq[0])
+        s = Sequence(self.expr.impl, _seq[0])
+        self.refs.append(s)
+        return s
     
     def set_implicit_timezone(self, timezone):
         _handle_error(self._context.set_implicit_timezone(
@@ -332,7 +347,10 @@ class Expression:
             context = self.create_context()
         _context = context._context
         _handle_error(self._expr.execute(self._expr, _context, _seq))
-        return Sequence(self.impl, _seq[0], refs=[self])
+        s = Sequence(self.impl, _seq[0], refs=[self])
+        # Sequence needs to be deleted after context
+        context.refs.append(s)
+        return s
     def create_context(self):
         _context = ffi.new('XQC_DynamicContext**')
         _handle_error(self._expr.create_context(self._expr, _context))
@@ -343,11 +361,11 @@ class Expression:
         self._expr.free(self._expr)
 
 class Sequence:
-    def __init__(self, impl, _seq, refs=[]):
+    def __init__(self, impl, _seq, refs=[], _owned=True):
         self.impl = impl
         self._refs = refs
         self._seq = _seq
-        self._owned = True
+        self._owned = _owned
     def __iter__(self):
         return self
     def type(self):
@@ -478,7 +496,7 @@ class BaseType(object):
     def __str__(self):
         return unicode(self.value)
     def __eq__(self, other):
-        return (self.value == other.value)
+        return (self.val() == other.val())
     @classmethod
     def from_item(cls, sequence):
         """Create the type from a sequence item"""
@@ -492,7 +510,7 @@ class Empty(BaseType):
             value = ''
         super(Empty, self).__init__(value)
     def val(self):
-        return None
+        return self.value
 class Document(BaseType):
     def __init__(self, node_name, value, uri=""):
         self.node_name = node_name
