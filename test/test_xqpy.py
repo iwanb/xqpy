@@ -23,7 +23,7 @@ class TestImplementation(TestCase):
         s = q.execute(context=c)
         self.assertEqual(list(s.values()), ['1', '2'])
     def test_file(self):
-        if type(self.impl) is xqpy.ZorbaImplementation:
+        if self.implname == 'Zorba':
             self.skipTest('Does not work with Zorba')
         with tempfile.TemporaryFile() as f:
             f.write('1 to 10'.encode('utf8'))
@@ -33,7 +33,7 @@ class TestImplementation(TestCase):
             s = q.execute()
             self.assertEqual(list(s.values()), list(range(1, 11)))
     def test_document_file(self):
-        if type(self.impl) is xqpy.ZorbaImplementation:
+        if self.implname == 'Zorba':
             self.skipTest('Does not work with Zorba')
         with tempfile.TemporaryFile() as f:
             f.write('<a>value</a>'.encode('utf8'))
@@ -43,7 +43,7 @@ class TestImplementation(TestCase):
             # Crash on node_name, XQilla bug?
             #self.assertEqual(tuple(s.values()), ('value',))
     def test_document(self):
-        if type(self.impl) is xqpy.ZorbaImplementation:
+        if self.implname == 'Zorba':
             self.skipTest('Does not work with Zorba')
         s = self.impl.parse_document('<a>value</a>')
         # Crash on node_name, XQilla bug?
@@ -71,7 +71,7 @@ class TestStaticContext(TestCase):
         del self.impl
         
     def test_base_uri(self):
-        if type(self.impl) is xqpy.ZorbaImplementation:
+        if self.implname == 'Zorba':
             baseuri = 'file:///'
         else:
             baseuri = ''
@@ -81,7 +81,7 @@ class TestStaticContext(TestCase):
     def test_child(self):
         self.context.set_base_uri('myuri:')
         child = self.context.create_child_context()
-        if type(self.impl) is not xqpy.ZorbaImplementation:
+        if self.implname != 'Zorba':
             # Zorba does not like this?
             self.assertEqual('myuri:', child.get_base_uri())
             child.set_base_uri('myuri2:')
@@ -123,7 +123,7 @@ class TestSequence(TestCase):
         s = self.impl.create_empty_sequence()
         self.assertEqual(list(s), list())
     def test_string(self):
-        if type(self.impl) is xqpy.ZorbaImplementation:
+        if self.implname == 'Zorba':
             self.skipTest('Does not work with Zorba')
         tests = (
             ("ab", "cd"),
@@ -150,7 +150,7 @@ class TestSequence(TestCase):
         tests = [
             (3, xqpy.Decimal(3)),
         ]
-        if type(self.impl) is not xqpy.ZorbaImplementation:
+        if self.implname != 'Zorba':
             # ??? not sure why they are not working
             tests.extend((
                 (3.1, xqpy.Double(3.1)),
@@ -193,6 +193,7 @@ def load_tests(loader, tests, pattern):
             tests = loader.loadTestsFromTestCase(new_class)
             for test in tests:
                 test.implC = impl
+                test.implname = name
                 suite.addTest(test)
     return suite
 
